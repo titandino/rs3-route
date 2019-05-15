@@ -21,6 +21,8 @@ public final class Store {
 		int idxsCount = index255.getArchivesCount();
 		indexes = new Index[idxsCount];
 		for (int id = 0; id < idxsCount; id++) {
+			if (id == 47)
+				continue;
 			Index index = new Index(index255, new MainFile(id, data, new RandomAccessFile(path + "main_file_cache.idx" + id, "rw")));
 			if (index.getTable() == null)
 				continue;

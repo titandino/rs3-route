@@ -158,12 +158,14 @@ public final class ReferenceTable {
 		int hash = stream.readUnsignedByte();
 		named = (0x1 & hash) != 0;
 		usesWhirpool = (0x2 & hash) != 0;
-		int validArchivesCount = protocol >= 7 ? stream.readBigSmart() : stream.readUnsignedShort();
+		boolean flag4 = (hash & 0x4) != 0;
+		boolean flag5 = (hash & 0x8) != 0;
+		int validArchivesCount = protocol >= 7 ? stream.readSmart() : stream.readUnsignedShort();
 		validArchiveIds = new int[validArchivesCount];
 		int lastArchiveId = 0;
 		int biggestArchiveId = 0;
 		for (int index = 0; index < validArchivesCount; index++) {
-			int archiveId = lastArchiveId += protocol >= 7 ? stream.readBigSmart() : stream.readUnsignedShort();
+			int archiveId = (lastArchiveId = lastArchiveId + (protocol >= 7 ? stream.readSmart() : stream.readUnsignedShort()));
 			if (archiveId > biggestArchiveId)
 				biggestArchiveId = archiveId;
 			validArchiveIds[index] = archiveId;
@@ -176,6 +178,10 @@ public final class ReferenceTable {
 				archives[validArchiveIds[index]].setNameHash(stream.readInt());
 		for (int index = 0; index < validArchivesCount; index++)
 			archives[validArchiveIds[index]].setCrc(stream.readInt());
+		if (flag5) {
+			for (int index = 0; index < validArchivesCount; index++)
+				stream.readInt();
+		}
 		if (usesWhirpool) {
 			for (int index = 0; index < validArchivesCount; index++) {
 				byte[] whirpool = new byte[64];
@@ -183,16 +189,24 @@ public final class ReferenceTable {
 				archives[validArchiveIds[index]].setWhirpool(whirpool);
 			}
 		}
+		if (flag4) {
+			for (int index = 0; index < validArchivesCount; index++) {
+				stream.readInt();
+				stream.readInt();
+			}
+		}
 		for (int index = 0; index < validArchivesCount; index++)
 			archives[validArchiveIds[index]].setRevision(stream.readInt());
-		for (int index = 0; index < validArchivesCount; index++)
-			archives[validArchiveIds[index]].setValidFileIds(new int[protocol >= 7 ? stream.readBigSmart() : stream.readUnsignedShort()]);
+		for (int index = 0; index < validArchivesCount; index++) {
+			int size = protocol >= 7 ? stream.readSmart() : stream.readUnsignedShort();
+			archives[validArchiveIds[index]].setValidFileIds(new int[size]);
+		}
 		for (int index = 0; index < validArchivesCount; index++) {
 			int lastFileId = 0;
 			int biggestFileId = 0;
 			ArchiveReference archive = archives[validArchiveIds[index]];
 			for (int index2 = 0; index2 < archive.getValidFileIds().length; index2++) {
-				int fileId = lastFileId += protocol >= 7 ? stream.readBigSmart() : stream.readUnsignedShort();
+				int fileId = lastFileId += protocol >= 7 ? stream.readSmart() : stream.readUnsignedShort();
 				if (fileId > biggestFileId)
 					biggestFileId = fileId;
 				archive.getValidFileIds()[index2] = fileId;

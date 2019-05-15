@@ -8,7 +8,7 @@ import com.rs.region.Region;
 public class Main {
 	
 	public static void main(String[] args) throws IOException {
-		Cache.init("C:/Users/Trent/Desktop/764 Cache/");
+		Cache.init("D:/RSPS/EclipseWorkspace/Axios RS3/cache/");
 //		for (int i = 0;i < Short.MAX_VALUE;i++) {
 //			new Region(i);
 //		}

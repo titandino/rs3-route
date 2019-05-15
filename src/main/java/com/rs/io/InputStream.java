@@ -271,11 +271,15 @@ public final class InputStream extends Stream {
         }
 	}
 	
+    public int peekByte() {
+	return getRemaining() > 0 ? buffer[offset] : 0;
+    }
+	
 	public final int readSmart() {
-		int v = this.buffer[this.offset] & 0xff;
-		if (v < 0x80)
-			return readUnsignedByte() - 0x40;
-		return readUnsignedShort() - 0xC000;
+		byte v = (byte) peekByte();
+		if (v >= 0)
+		    return readShort() & 0xffff;
+		return readInt() & 0x7fffffff;
 	}
 
 	public int readUnsignedSmart() {
