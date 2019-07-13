@@ -1,5 +1,8 @@
 package com.rs.region;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import com.rs.cache.Cache;
 import com.rs.cache.IndexType;
 import com.rs.cache.loaders.ObjectDefinitions;
@@ -7,8 +10,19 @@ import com.rs.io.InputStream;
 
 public class Region {
 
+	public static final int[] OBJECT_SLOTS = new int[] { 0, 0, 0, 0, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3 };
+	public static final int WIDTH = 64;
+	public static final int HEIGHT = 64;
+	
 	private byte[][][] clip;
+	private int[][][] overlayIds;
+	private int[][][] underlayIds;
+	private byte[][][] overlayPathShapes;
+	private byte[][][] overlayRotations;
+	private byte[][][] tileFlags;
+	protected WorldObject[][][][] objects;
 	private int regionId;
+	private boolean hasData;
 
 	public Region(int regionId) {
 		this.regionId = regionId;
@@ -28,8 +42,14 @@ public class Region {
 			System.out.println("Skipping region: " + regionId + "(" + regionX + ", " + regionY + ")");
 			return;
 		}
+		
+		setHasData(true);
 
-		byte[][][] tileFlags = new byte[4][64][64];
+		overlayIds = new int[4][64][64];
+		underlayIds = new int[4][64][64];
+		overlayPathShapes = new byte[4][64][64];
+		overlayRotations = new byte[4][64][64];
+		tileFlags = new byte[4][64][64];
 		clip = new byte[4][64][64];
 
 		InputStream mapStream = new InputStream(mapContainerData);
@@ -38,17 +58,20 @@ public class Region {
 				for (int y = 0; y < 64; y++) {
 					int value = mapStream.readUnsignedByte();
 					if ((value & 0x1) != 0) {
-						mapStream.readUnsignedByte();
-						mapStream.readUnsignedSmart();
+						int overlayMetaData = mapStream.readUnsignedByte();
+						overlayIds[plane][x][y] = mapStream.readUnsignedSmart();
+						overlayPathShapes[plane][x][y] = (byte) (overlayMetaData >> 2);
+						overlayRotations[plane][x][y] = (byte) (overlayMetaData & 0x3);
 					}
 					if ((value & 0x2) != 0) {
 						tileFlags[plane][x][y] = (byte) mapStream.readByte();
 					}
 					if ((value & 0x4) != 0) {
-						mapStream.readUnsignedSmart();
+						underlayIds[plane][x][y] = mapStream.readUnsignedSmart();
 					}
 					if ((value & 0x8) != 0) {
 						mapStream.readUnsignedByte();
+						//tileHeights[plane][x][y] 
 					}
 				}
 			}
@@ -91,8 +114,6 @@ public class Region {
 					objectPlane--;
 				if (objectPlane < 0 || objectPlane >= 4 || plane < 0 || plane >= 4)
 					continue;
-				if (type > 22)
-					System.out.println(ObjectDefinitions.getObjectDefinitions(objectId).getName() + "("+objectId+") type: " + type);
 				clip(objectId, type, rotation, objectPlane, localX, localY);
 			}
 		}
@@ -104,8 +125,15 @@ public class Region {
 			return;
 		if (x < 0 || y < 0 || x >= clip[plane].length || y >= clip[plane][x].length)
 			return;
+		if (type >= OBJECT_SLOTS.length)
+			return;
+		if (objects == null)
+			objects = new WorldObject[4][64][64][4];
 		ObjectDefinitions objectDefinition = ObjectDefinitions.getObjectDefinitions(id);
-
+		
+		int slot = OBJECT_SLOTS[type];
+		objects[plane][x][y][slot] = new WorldObject(id, type, rotation, x, y, plane);
+		
 		if (type == 22 ? objectDefinition.getClipType() != 1 : objectDefinition.getClipType() == 0)
 			return;
 		if (type >= 0 && type <= 3) {
@@ -210,5 +238,80 @@ public class Region {
 			return RouteFlag.BLOCKED.flag;
 		return clip[plane][x][y];
 	}
+	
+	public List<WorldObject> getObjects() {
+		if (objects == null) {
+			return null;
+		}
+		List<WorldObject> list = new ArrayList<WorldObject>();
+		for (int z = 0; z < objects.length; z++) {
+			if (objects[z] == null) {
+				continue;
+			}
+			for (int x = 0; x < objects[z].length; x++) {
+				if (objects[z][x] == null) {
+					continue;
+				}
+				for (int y = 0; y < objects[z][x].length; y++) {
+					if (objects[z][x][y] == null) {
+						continue;
+					}
+					for (WorldObject o : objects[z][x][y]) {
+						if (o != null) {
+							list.add(o);
+						}
+					}
+				}
+			}
+		}
+		return list;
+	}
+	
+	public final boolean isLinkedBelow(final int z, final int x, final int y) {
+		return RenderFlag.flagged(getRenderFlags(z, x, y), RenderFlag.LOWER_OBJECT_CLIP);
+	}
 
+	public final boolean isVisibleBelow(final int z, final int x, final int y) {
+		return RenderFlag.flagged(getRenderFlags(z, x, y), RenderFlag.FORCE_TO_BOTTOM);
+	}
+	
+	public int getRenderFlags(int z, int x, int y) {
+		return tileFlags != null ? tileFlags[z][x][y] : 0;
+	}
+
+	public int getUnderlayId(int z, int x, int y) {
+		return underlayIds != null ? underlayIds[z][x][y] & 0x7fff : -1;
+	}
+	
+	public int getOverlayId(int z, int x, int y) {
+		return overlayIds != null ? overlayIds[z][x][y] & 0x7fff : -1;
+	}
+	
+	public int getOverlayPathShape(int z, int x, int y) {
+		return overlayPathShapes != null ? overlayPathShapes[z][x][y] & 0x7fff : -1;
+	}
+	
+	public int getOverlayRotation(int z, int x, int y) {
+		return overlayRotations != null ? overlayRotations[z][x][y] : -1;
+	}
+	
+	public int getBaseX() {
+		return (regionId >> 8 & 0xFF) << 6;
+	}
+	
+	public int getBaseY() {
+		return (regionId & 0xFF) << 6;
+	}
+
+	public boolean hasData() {
+		return hasData;
+	}
+
+	public void setHasData(boolean hasData) {
+		this.hasData = hasData;
+	}
+	
+	public int getRegionId() {
+		return regionId;
+	}
 }
